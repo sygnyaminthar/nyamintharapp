@@ -16,8 +16,8 @@ android {
 
     buildTypes {
         release {
-            minifyEnabled = false
-            shrinkResources = false
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 
