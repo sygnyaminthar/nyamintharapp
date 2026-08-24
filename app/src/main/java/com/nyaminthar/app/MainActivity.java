@@ -5,7 +5,6 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
-import android.view.View;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -27,27 +26,17 @@ public class MainActivity extends AppCompatActivity {
     private static final String WEBSITE_URL =
             "https://nyaminthar.com/?app=1";
 
-    /*
-     * Common advertising / tracking domains.
-     * These are blocked only inside this Android WebView.
-     */
     private static final Set<String> BLOCKED_DOMAINS = new HashSet<>(
             Arrays.asList(
-
-                    // Adsterra
                     "adsterra.com",
                     "adriver.ru",
                     "go.adsterra.com",
                     "adnxs.com",
-
-                    // Monetag / Propeller style ad domains
                     "monetag.com",
                     "propellerads.com",
                     "onclicka.com",
                     "propush.net",
                     "pushame.com",
-
-                    // Other common ad networks
                     "doubleclick.net",
                     "googlesyndication.com",
                     "googleadservices.com",
@@ -62,8 +51,6 @@ public class MainActivity extends AppCompatActivity {
                     "hilltopads.net",
                     "hilltopads.com",
                     "adcash.com",
-
-                    // Tracking / analytics
                     "scorecardresearch.com",
                     "quantserve.com",
                     "hotjar.com",
@@ -89,31 +76,23 @@ public class MainActivity extends AppCompatActivity {
 
         WebSettings settings = webView.getSettings();
 
-        // Required for modern websites
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
-
-        // Better website compatibility
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
-
-        // Allow normal website storage
         settings.setDatabaseEnabled(true);
 
-        // Prevent some unwanted windows
         settings.setSupportMultipleWindows(false);
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
 
-        // Disable zoom controls
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
 
-        // Cache
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
 
-        /*
-         * WebViewClient
-         */
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+
         webView.setWebViewClient(new WebViewClient() {
 
             @Override
@@ -126,45 +105,7 @@ public class MainActivity extends AppCompatActivity {
                     return false;
                 }
 
-                Uri uri = request.getUrl();
-
-                String scheme = uri.getScheme();
-                String host = uri.getHost();
-
-                if (scheme == null) {
-                    return false;
-                }
-
-                /*
-                 * Keep nyaminthar.com inside the WebView.
-                 */
-                if ("https".equalsIgnoreCase(scheme)
-                        || "http".equalsIgnoreCase(scheme)) {
-
-                    if (host != null && isOwnWebsite(host)) {
-                        return false;
-                    }
-
-                    /*
-                     * External HTTP/HTTPS links open in phone browser.
-                     */
-                    try {
-                        Intent intent =
-                                new Intent(Intent.ACTION_VIEW, uri);
-
-                        startActivity(intent);
-
-                        return true;
-
-                    } catch (Exception ignored) {
-                        return false;
-                    }
-                }
-
-                /*
-                 * Block unknown / unwanted schemes.
-                 */
-                return true;
+                return handleUrl(request.getUrl());
             }
 
             @Override
@@ -177,13 +118,16 @@ public class MainActivity extends AppCompatActivity {
                     return false;
                 }
 
-                Uri uri = Uri.parse(url);
+                return handleUrl(Uri.parse(url));
+            }
+
+            private boolean handleUrl(Uri uri) {
 
                 String scheme = uri.getScheme();
                 String host = uri.getHost();
 
                 if (scheme == null) {
-                    return false;
+                    return true;
                 }
 
                 if ("https".equalsIgnoreCase(scheme)
@@ -194,16 +138,18 @@ public class MainActivity extends AppCompatActivity {
                     }
 
                     try {
-                        Intent intent =
-                                new Intent(Intent.ACTION_VIEW, uri);
 
-                        startActivity(intent);
-
-                        return true;
+                        startActivity(
+                                new Intent(
+                                        Intent.ACTION_VIEW,
+                                        uri
+                                )
+                        );
 
                     } catch (Exception ignored) {
-                        return false;
                     }
+
+                    return true;
                 }
 
                 return true;
@@ -215,27 +161,27 @@ public class MainActivity extends AppCompatActivity {
                     WebResourceRequest request
             ) {
 
-                if (request != null && request.getUrl() != null) {
+                if (request != null
+                        && request.getUrl() != null) {
 
-                    String url = request.getUrl()
-                            .toString()
-                            .toLowerCase();
+                    Uri uri = request.getUrl();
 
-                    String host = request.getUrl().getHost();
+                    String url =
+                            uri.toString().toLowerCase();
 
-                    if (isBlockedUrl(url, host)) {
+                    if (isBlockedUrl(
+                            url,
+                            uri.getHost()
+                    )) {
 
-                        return new WebResourceResponse(
-                                "text/plain",
-                                "UTF-8",
-                                new ByteArrayInputStream(
-                                        new byte[0]
-                                )
-                        );
+                        return emptyResponse();
                     }
                 }
 
-                return super.shouldInterceptRequest(view, request);
+                return super.shouldInterceptRequest(
+                        view,
+                        request
+                );
             }
 
             @Override
@@ -246,39 +192,24 @@ public class MainActivity extends AppCompatActivity {
 
                 if (url != null) {
 
+                    Uri uri = Uri.parse(url);
+
                     String lowerUrl =
                             url.toLowerCase();
 
-                    Uri uri = Uri.parse(url);
-                    String host = uri.getHost();
+                    if (isBlockedUrl(
+                            lowerUrl,
+                            uri.getHost()
+                    )) {
 
-                    if (isBlockedUrl(lowerUrl, host)) {
-
-                        return new WebResourceResponse(
-                                "text/plain",
-                                "UTF-8",
-                                new ByteArrayInputStream(
-                                        new byte[0]
-                                )
-                        );
+                        return emptyResponse();
                     }
                 }
 
-                return super.shouldInterceptRequest(view, url);
-            }
-
-            @Override
-            public void onPageFinished(
-                    WebView view,
-                    String url
-            ) {
-
-                super.onPageFinished(view, url);
-
-                /*
-                 * Remove common advertising elements.
-                 */
-                removeAds(view);
+                return super.shouldInterceptRequest(
+                        view,
+                        url
+                );
             }
 
             @Override
@@ -288,81 +219,82 @@ public class MainActivity extends AppCompatActivity {
                     Bitmap favicon
             ) {
 
-                super.onPageStarted(view, url);
+                super.onPageStarted(
+                        view,
+                        url,
+                        favicon
+                );
 
-                /*
-                 * Inject early CSS/JS as soon as possible.
-                 */
+                removeAds(view);
+            }
+
+            @Override
+            public void onPageFinished(
+                    WebView view,
+                    String url
+            ) {
+
+                super.onPageFinished(
+                        view,
+                        url
+                );
+
                 removeAds(view);
             }
         });
 
-        /*
-         * Prevent WebView from opening popup windows.
-         */
-        webView.setWebChromeClient(new WebChromeClient() {
+        webView.setWebChromeClient(
+                new WebChromeClient() {
 
-            @Override
-            public boolean onCreateWindow(
-                    WebView view,
-                    boolean isDialog,
-                    boolean isUserGesture,
-                    android.os.Message resultMsg
-            ) {
-                return false;
-            }
+                    @Override
+                    public boolean onCreateWindow(
+                            WebView view,
+                            boolean isDialog,
+                            boolean isUserGesture,
+                            android.os.Message resultMsg
+                    ) {
 
-            @Override
-            public boolean onJsAlert(
-                    WebView view,
-                    String url,
-                    String message,
-                    android.webkit.JsResult result
-            ) {
-                /*
-                 * Block JavaScript alert popups.
-                 */
-                result.cancel();
-                return true;
-            }
+                        return false;
+                    }
 
-            @Override
-            public boolean onJsConfirm(
-                    WebView view,
-                    String url,
-                    String message,
-                    android.webkit.JsResult result
-            ) {
-                /*
-                 * Block JavaScript confirm popups.
-                 */
-                result.cancel();
-                return true;
-            }
-        });
+                    @Override
+                    public boolean onJsAlert(
+                            WebView view,
+                            String url,
+                            String message,
+                            android.webkit.JsResult result
+                    ) {
 
-        /*
-         * Basic WebView security / compatibility.
-         */
-        settingsSafeConfiguration();
+                        result.cancel();
+
+                        return true;
+                    }
+
+                    @Override
+                    public boolean onJsConfirm(
+                            WebView view,
+                            String url,
+                            String message,
+                            android.webkit.JsResult result
+                    ) {
+
+                        result.cancel();
+
+                        return true;
+                    }
+                }
+        );
     }
 
-    private void settingsSafeConfiguration() {
+    private WebResourceResponse emptyResponse() {
 
-        WebSettings settings = webView.getSettings();
-
-        settings.setAllowFileAccess(false);
-        settings.setAllowContentAccess(false);
-
-        /*
-         * Do not allow WebView to create extra windows.
-         */
-        settings.setSupportMultipleWindows(false);
-
-        /*
-         * Keep JavaScript enabled because the website needs it.
-         */
-        settings.setJavaScriptEnabled(true);
+        return new WebResourceResponse(
+                "text/plain",
+                "UTF-8",
+                new ByteArrayInputStream(
+                        new byte[0]
+                )
+        );
     }
 
     private boolean isOwnWebsite(String host) {
@@ -371,10 +303,15 @@ public class MainActivity extends AppCompatActivity {
             return false;
         }
 
-        host = host.toLowerCase();
+        String lowerHost =
+                host.toLowerCase();
 
-        return host.equals("nyaminthar.com")
-                || host.endsWith(".nyaminthar.com");
+        return lowerHost.equals(
+                "nyaminthar.com"
+        )
+                || lowerHost.endsWith(
+                ".nyaminthar.com"
+        );
     }
 
     private boolean isBlockedUrl(
@@ -386,36 +323,28 @@ public class MainActivity extends AppCompatActivity {
             return false;
         }
 
-        String lowerUrl = url.toLowerCase();
-
-        /*
-         * Check hostname.
-         */
         if (host != null) {
 
             String lowerHost =
                     host.toLowerCase();
 
-            for (String domain : BLOCKED_DOMAINS) {
+            for (String domain :
+                    BLOCKED_DOMAINS) {
 
                 if (lowerHost.equals(domain)
-                        || lowerHost.endsWith("." + domain)) {
+                        || lowerHost.endsWith(
+                        "." + domain
+                )) {
 
                     return true;
                 }
             }
         }
 
-        /*
-         * Check common ad-related URL patterns.
-         */
         String[] blockedPatterns = {
 
                 "/popunder",
-                "/popunder.",
-                "popunder.",
                 "/popup",
-                "/popup.",
                 "popunder",
                 "adserver",
                 "adsserver",
@@ -437,9 +366,10 @@ public class MainActivity extends AppCompatActivity {
                 "push-notification"
         };
 
-        for (String pattern : blockedPatterns) {
+        for (String pattern :
+                blockedPatterns) {
 
-            if (lowerUrl.contains(pattern)) {
+            if (url.contains(pattern)) {
                 return true;
             }
         }
@@ -458,9 +388,6 @@ public class MainActivity extends AppCompatActivity {
 
                 "try {" +
 
-                /*
-                 * CSS selectors for common ad elements.
-                 */
                 "var selectors = [" +
 
                 "\"[class*='ad-']\"," +
@@ -470,12 +397,14 @@ public class MainActivity extends AppCompatActivity {
                 "\"[class*='banner']\"," +
                 "\"[class*='popunder']\"," +
                 "\"[class*='popup']\"," +
+
                 "\"[id*='ad-']\"," +
                 "\"[id*='ads-']\"," +
                 "\"[id*='advert']\"," +
                 "\"[id*='banner']\"," +
                 "\"[id*='popunder']\"," +
                 "\"[id*='popup']\"," +
+
                 "\"iframe[src*='ads']\"," +
                 "\"iframe[src*='advert']\"," +
                 "\"iframe[src*='banner']\"," +
@@ -483,48 +412,55 @@ public class MainActivity extends AppCompatActivity {
 
                 "];" +
 
-                /*
-                 * Hide matched elements.
-                 */
                 "var css = selectors.join(',') +" +
-                "\"{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;}\";" +
 
-                /*
-                 * Add CSS to page.
-                 */
-                "var style = document.getElementById('nyaminthar-app-adblock-style');" +
+                "\"{display:none!important;" +
+                "visibility:hidden!important;" +
+                "opacity:0!important;" +
+                "pointer-events:none!important;}\";" +
 
-                "if (!style) {" +
+                "var style = document.getElementById(" +
+                "'nyaminthar-app-adblock-style'" +
+                ");" +
+
+                "if (!style && document.head) {" +
+
                 "style = document.createElement('style');" +
-                "style.id = 'nyaminthar-app-adblock-style';" +
+
+                "style.id =" +
+                "'nyaminthar-app-adblock-style';" +
+
                 "style.innerHTML = css;" +
+
                 "document.head.appendChild(style);" +
+
                 "}" +
 
-                /*
-                 * Remove matched elements.
-                 */
                 "selectors.forEach(function(selector) {" +
 
                 "try {" +
 
-                "document.querySelectorAll(selector).forEach(function(el) {" +
+                "document.querySelectorAll(selector)" +
+                ".forEach(function(el) {" +
+
                 "el.remove();" +
+
                 "});" +
 
                 "} catch(e) {}" +
 
                 "});" +
 
-                /*
-                 * Remove scripts containing common ad networks.
-                 */
-                "document.querySelectorAll('script').forEach(function(script) {" +
+                "document.querySelectorAll('script')" +
+                ".forEach(function(script) {" +
 
                 "var src = script.src || '';" +
+
                 "var text = script.textContent || '';" +
 
-                "var value = (src + ' ' + text).toLowerCase();" +
+                "var value = (" +
+                "src + ' ' + text" +
+                ").toLowerCase();" +
 
                 "var blocked = [" +
 
@@ -540,47 +476,65 @@ public class MainActivity extends AppCompatActivity {
 
                 "];" +
 
-                "for (var i=0;i<blocked.length;i++) {" +
+                "for (" +
+                "var i = 0;" +
+                "i < blocked.length;" +
+                "i++" +
+                ") {" +
 
-                "if (value.indexOf(blocked[i]) !== -1) {" +
+                "if (" +
+                "value.indexOf(blocked[i]) !== -1" +
+                ") {" +
+
                 "script.remove();" +
+
                 "break;" +
+
                 "}" +
 
                 "}" +
 
                 "});" +
 
-                /*
-                 * Remove common fixed overlays.
-                 */
-                "document.querySelectorAll('body *').forEach(function(el) {" +
+                "document.querySelectorAll('body *')" +
+                ".forEach(function(el) {" +
 
                 "try {" +
 
-                "var s = window.getComputedStyle(el);" +
-
-                "if (s.position === 'fixed' && " +
-                "(parseInt(s.zIndex || '0') > 9999)) {" +
-
-                "var txt = (el.innerText || '').toLowerCase();" +
-                "var cl = (el.className || '').toString().toLowerCase();" +
-                "var id = (el.id || '').toLowerCase();" +
+                "var s =" +
+                "window.getComputedStyle(el);" +
 
                 "if (" +
-                "cl.indexOf('ad') !== -1 || " +
-                "cl.indexOf('popup') !== -1 || " +
-                "cl.indexOf('banner') !== -1 || " +
-                "cl.indexOf('popunder') !== -1 || " +
-                "id.indexOf('ad') !== -1 || " +
-                "id.indexOf('popup') !== -1 || " +
-                "id.indexOf('banner') !== -1 || " +
-                "txt.indexOf('advertisement') !== -1" +
+                "s.position === 'fixed' &&" +
+                "parseInt(s.zIndex || '0') > 9999" +
+                ") {" +
+
+                "var cl =" +
+                "(el.className || '')" +
+                ".toString()" +
+                ".toLowerCase();" +
+
+                "var id =" +
+                "(el.id || '')" +
+                ".toLowerCase();" +
+
+                "if (" +
+
+                "cl.indexOf('ad') !== -1 ||" +
+                "cl.indexOf('popup') !== -1 ||" +
+                "cl.indexOf('banner') !== -1 ||" +
+                "cl.indexOf('popunder') !== -1 ||" +
+
+                "id.indexOf('ad') !== -1 ||" +
+                "id.indexOf('popup') !== -1 ||" +
+                "id.indexOf('banner') !== -1" +
+
                 ") {" +
 
                 "el.remove();" +
 
                 "}" +
+
                 "}" +
 
                 "} catch(e) {}" +
@@ -600,7 +554,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onBackPressed() {
 
-        if (webView != null && webView.canGoBack()) {
+        if (webView != null
+                && webView.canGoBack()) {
 
             webView.goBack();
 
@@ -616,9 +571,17 @@ public class MainActivity extends AppCompatActivity {
         if (webView != null) {
 
             webView.stopLoading();
-            webView.setWebChromeClient(null);
-            webView.setWebViewClient(null);
+
+            webView.setWebChromeClient(
+                    null
+            );
+
+            webView.setWebViewClient(
+                    null
+            );
+
             webView.destroy();
+
             webView = null;
         }
 
